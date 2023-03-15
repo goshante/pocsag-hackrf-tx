@@ -106,3 +106,8 @@ void HackRFDevice::Close()
 	hackrf_close(_dev);
 	_dev = NULL;
 }
+
+bool HackRFDevice::IsRunning()
+{
+	return mRunning;
+}

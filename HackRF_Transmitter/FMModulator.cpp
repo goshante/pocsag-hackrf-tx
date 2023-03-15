@@ -5,11 +5,15 @@ constexpr const uint32_t BYTES_PER_SAMPLE	= 2;
 constexpr const double M_PI					= 3.14159265358979323846;
 constexpr const uint32_t BUF_LEN			= 262144;         //hackrf tx buf
 
+using namespace std::chrono_literals;
 
 FMModulator::FMModulator(float localGain)
 	: m_localGain(localGain / (float)100.0)
 	, m_ready(false)
 	, m_FM_phase(0)
+	, m_queueThread(nullptr)
+	, m_stop(true)
+	, m_emptyQueue(true)
 {
 	memset(m_last_in_samples, 0, sizeof(m_last_in_samples));
 	
@@ -23,14 +27,19 @@ FMModulator::FMModulator(float localGain)
 	m_interpolatedBuf.resize(BUF_LEN);
 	m_IQ_buf.resize(BUF_LEN * BYTES_PER_SAMPLE);
 
-	m_chunkSizeSamples = 2048;
-	m_chunkOffset = 0;
+	m_subchunkSizeSamples = 2048;
+	m_subchunkOffset = 0;
 	m_FMdeviationKHz = 75.0e3;
 	m_AM = false;
+
+	if (!m_device.Open(this))
+		throw std::runtime_error("Failed to open HackRF device.");
 }
 
 FMModulator::~FMModulator()
 {
+	if (m_device.IsRunning())
+		StopTX();
 	m_mutex.lock();
 	m_device.Close();
 	m_mutex.unlock();
@@ -38,22 +47,12 @@ FMModulator::~FMModulator()
 
 void FMModulator::SetFMDeviationKHz(double value)
 {
-	m_FMdeviationKHz = value;
+	m_FMdeviationKHz = value * 1000;
 }
 
-bool FMModulator::Open()
+void FMModulator::SetFrequency(uint64_t mhz, uint64_t khz, uint64_t hz)
 {
-	return m_device.Open(this);
-}
-
-void FMModulator::Close()
-{
-	m_device.Close();
-}
-
-void FMModulator::SetFrequency(uint64_t freg)
-{
-	m_device.SetFrequency(freg);
+	m_device.SetFrequency((mhz * 1000000) + (khz * 1000) + hz);
 }
 
 void FMModulator::SetGainRF(float gain)
@@ -73,12 +72,96 @@ void FMModulator::SetAMP(bool enableamp)
 
 bool FMModulator::StartTX()
 {
-	return m_device.StartTx();
+	if ((m_waveQueue.empty() && m_currentChunk.empty()) || m_device.IsRunning())
+		return false;
+
+	if (m_currentChunk.empty())
+	{
+		m_subchunkOffset = 0;
+		m_hackrf_sample = uint32_t((m_wavInfo.samplingRate * 1.0 / m_subchunkSizeSamples) * BUF_LEN);
+		m_device.SetSampleRate(m_hackrf_sample);
+		m_FM_phase = 0;
+	}
+	m_stopped = {};
+	m_started = {};
+	m_stop = false;
+	m_ready = true;
+
+	if (m_queueThread)
+		delete m_queueThread;
+
+	m_queueThread = new std::thread(&FMModulator::_workerThread, this);
+	auto fut = m_started.get_future();
+	if (fut.wait_for(10s) != std::future_status::ready)
+		return false;
+
+	return fut.get();
+}
+
+void FMModulator::_workerThread()
+{
+	if (!m_device.StartTx())
+	{
+		m_started.set_value(false);
+		return;
+	}
+
+	while (!m_stop)
+	{
+		if (!m_currentChunk.empty())
+			goto continueSubchunk;
+
+		if (m_waveQueue.empty())
+			m_emptyQueue = true;
+		else
+		{
+			if (m_subchunkOffset >= m_currentChunk.size())
+			{
+				m_currentChunk = std::move(m_waveQueue.front());
+				m_waveQueue.pop();
+				if (!_prepareNext())
+				{
+					m_currentChunk.clear();
+					continue;
+				}
+			}
+
+		continueSubchunk:
+			while (!m_stop)
+			{
+				if (m_ready)
+				{
+					_nextSubChunk();
+					if (!_prepareNext())
+						break;
+				}
+			}
+
+			if (!m_stop)
+				m_currentChunk.clear();
+		}
+	}
+
+	m_stopped.set_value(!m_device.StopTx());
 }
 
 bool FMModulator::StopTX()
 {
-	return m_device.StopTx();
+	if (!m_device.IsRunning())
+		return false;
+
+
+	m_stop = true;
+	auto fut = m_stopped.get_future();
+	if (fut.wait_for(30s) != std::future_status::ready)
+		throw std::runtime_error("Failed to stop TX. Timeout.");
+	bool stopped = fut.get();
+
+	m_queueThread->join();
+	delete m_queueThread;
+	m_queueThread = nullptr;
+
+	return stopped;
 }
 
 void FMModulator::SetAM(bool set)
@@ -86,9 +169,9 @@ void FMModulator::SetAM(bool set)
 	m_AM = set;
 }
 
-void FMModulator::SetChunkSizeSamples(size_t count)
+void FMModulator::SetSubChunkSizeSamples(size_t count)
 {
-	m_chunkSizeSamples = count;
+	m_subchunkSizeSamples = count;
 }
 
 uint32_t FMModulator::GetDeviceSampleRate()
@@ -98,39 +181,26 @@ uint32_t FMModulator::GetDeviceSampleRate()
 
 void FMModulator::SetupFormat(WavSource::PCMHeader waveMetadata)
 {
+	if (m_device.IsRunning())
+		throw std::runtime_error("Trying to change format while TX is active.");
+
 	m_wavInfo = waveMetadata;
 }
 
 void FMModulator::PushSamples(const std::vector<float>& samples)
 {
-	m_waveBuffer = src.getData();
-	m_wavInfo = src.pcmInfo();
-	m_chunkOffset = 0;
-	m_hackrf_sample = uint32_t((m_wavInfo.samplingRate * 1.0 / m_chunkSizeSamples) * BUF_LEN);
-	m_device.SetSampleRate(m_hackrf_sample);
-
-	m_FM_phase = 0;
-	prepareNext();
-	m_ready = true;
-
-	//Make mono
-	if (m_wavInfo.channels == 2) //todo
-	{
-		return;
-
-		for (uint32_t i = 0; i < m_waveBuffer.size(); i+=2)
-			m_waveBuffer[i] = (m_waveBuffer[i * 2] + m_waveBuffer[i * 2 + 1]) / (float)2.0;
-		m_wavInfo.channels = 1;
-		//m_wavInfo.sampleCount = m_wavInfo.sampleCount / 2;
-	}
+	m_mutex.lock();
+	m_waveQueue.push(samples);
+	m_emptyQueue = false;
+	m_mutex.unlock();
 }
 
 uint32_t FMModulator::GetChunkSizeSamples()
 {
-	return m_chunkSizeSamples;
+	return m_subchunkSizeSamples;
 }
 
-void FMModulator::interpolation() 
+void FMModulator::_interpolation() 
 {
 	uint32_t i;		/* Input buffer index + 1. */
 	uint32_t j = 0;	/* Output buffer index. */
@@ -139,7 +209,7 @@ void FMModulator::interpolation()
 
 					/* We always "stay one sample behind", so what would be our first sample
 					* should be the last one wrote by the previous call. */
-	float* in_buf = &m_waveBuffer[m_chunkOffset];
+	float* in_buf = &m_currentChunk[m_subchunkOffset];
 	pos = (float)m_sample_count / (float)BUF_LEN;
 	while (pos < 1.0)
 	{
@@ -167,7 +237,7 @@ void FMModulator::interpolation()
 		m_last_in_samples[j] = in_buf[i];
 }
 
-void FMModulator::modulation() 
+void FMModulator::_modulation() 
 {
 	double fm_deviation = 2.0 * M_PI * m_FMdeviationKHz / m_hackrf_sample;
 
@@ -207,7 +277,7 @@ void FMModulator::modulation()
 	}
 }
 
-void FMModulator::work(size_t offset) 
+void FMModulator::_work(size_t offset) 
 {
 	m_mutex.lock();
 	auto& buf = m_workerBuf[m_head];
@@ -238,44 +308,43 @@ int FMModulator::onData(int8_t* buffer, uint32_t length)
 	return 0;
 }
 
-void FMModulator::prepareNext()
+bool FMModulator::_prepareNext()
 {
-	auto samples = m_waveBuffer.size();
-	if (m_chunkOffset >= samples)
-		return;
+	auto samples = m_currentChunk.size();
+	if (m_subchunkOffset >= samples)
+		return false;
 
-	if (m_chunkOffset + m_chunkSizeSamples > samples)
-		m_sample_count = samples - m_chunkOffset;
+	if (m_subchunkOffset + m_subchunkSizeSamples > samples)
+		m_sample_count = samples - m_subchunkOffset;
 	else
-		m_sample_count = m_chunkSizeSamples;
+		m_sample_count = m_subchunkSizeSamples;
 
-	uint32_t newRFSampleRate = uint32_t((m_wavInfo.samplingRate * 1.0 / m_chunkSizeSamples) * BUF_LEN);
+	uint32_t newRFSampleRate = uint32_t((m_wavInfo.samplingRate * 1.0 / m_subchunkSizeSamples) * BUF_LEN);
 	if (m_hackrf_sample != newRFSampleRate)
 	{
 		m_hackrf_sample = newRFSampleRate;
 		m_device.SetSampleRate(m_hackrf_sample);
 	}
 
-	interpolation();
-	modulation();
+	_interpolation();
+	_modulation();
 
-	m_chunkOffset += m_sample_count;
+	m_subchunkOffset += m_sample_count;
+	return true;
 }
 
-void FMModulator::NextChunk()
+void FMModulator::_nextSubChunk()
 {
-	auto samples = m_waveBuffer.size();
-	if (m_chunkOffset >= samples)
+	auto samples = m_currentChunk.size();
+	if (m_subchunkOffset >= samples)
 		return;
 
 	m_ready = false;
 	for (uint32_t i = 0; i < (BUF_LEN * BYTES_PER_SAMPLE); i += BUF_LEN)
-		work(i);
-
-	prepareNext();
+		_work(i);
 }
 
-bool FMModulator::ReadyNext()
+bool FMModulator::IsIdle()
 {
-	return m_ready;
+	return m_ready && !m_emptyQueue && m_device.IsRunning();
 }
