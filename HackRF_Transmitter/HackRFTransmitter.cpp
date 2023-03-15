@@ -207,7 +207,7 @@ void HackRFTransmitter::SetSubChunkSizeSamples(size_t count)
 	if (m_device.IsRunning())
 		throw std::runtime_error("Attempting to change subchunk sample count while transmission is active");
 
-	m_subchunkSizeSamples = count;
+	m_subchunkSizeSamples = (uint32_t)count;
 }
 
 uint32_t HackRFTransmitter::GetDeviceSampleRate() const
@@ -220,7 +220,7 @@ void HackRFTransmitter::SetPCMSamplingRate(size_t sampleRate)
 	if (m_device.IsRunning())
 		throw std::runtime_error("Trying to change PCM sample rate while TX is active.");
 
-	m_pcmSampleRate = sampleRate;
+	m_pcmSampleRate = (uint32_t)sampleRate;
 }
 
 void HackRFTransmitter::PushSamples(const HackRF_PCMSource& samples)
@@ -241,7 +241,7 @@ uint32_t HackRFTransmitter::GetChunkSizeSamples() const
 
 void HackRFTransmitter::_interpolation() 
 {
-	uint32_t i;		/* Input buffer index + 1. */
+	size_t i;		/* Input buffer index + 1. */
 	uint32_t j = 0;	/* Output buffer index. */
 	float pos;		/* Position relative to the input buffer
 					* + 1.0. */
