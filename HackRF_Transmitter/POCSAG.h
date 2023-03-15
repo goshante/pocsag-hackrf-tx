@@ -1,5 +1,16 @@
 #pragma once
 
+/*
+*  Subject: POCSAG::Encoder
+*  Purpose: Encode text, numeric and tone messages for pagers into POCSAG protocol buffer. 
+*           Can be in raw form and in form of PCM modulated buffer.
+*  Author: Goshante (http://github.com/goshante)
+*  Year: 2023
+*  Original project: https://github.com/goshante/pocsag-hackrf-tx
+*
+*  Comment: Free to use if you credit me in your project.
+*/
+
 #include <vector>
 #include <string>
 
@@ -22,7 +33,7 @@ namespace POCSAG
 		D = 0b11
 	};
 
-	enum class DateFormat
+	enum class DateTimePosition
 	{
 		None,    //No date and time
 		Begin,   //Adds date and time at the begining.
@@ -46,7 +57,7 @@ namespace POCSAG
 		uint32_t m_sampleRate;
 		PCMSample_t m_amplitude;
 		size_t m_maxBatches;
-		DateFormat m_dateFormat;
+		DateTimePosition m_dateFormat;
 
 		Encoder(const Encoder&) = delete;
 		Encoder& operator=(const Encoder&) = delete;
@@ -66,7 +77,7 @@ namespace POCSAG
 		void SetAmplitude(uint32_t sampleRate);
 
 		//Specify how date and time should be added to the message
-		void SetDateFormat(DateFormat format);
+		void SetDateTimePosition(DateTimePosition position);
 
 		// Encodes your message to POCSAG paging signal
 		// Takes:

@@ -1,5 +1,14 @@
-#ifndef _IHACKRFDATA_H
-#define _IHACKRFDATA_H
+#pragma once
+
+/*
+*  Subject: IHackRFData
+*  Purpose: Callback interface for HackRFDevice
+*  Author: Goshante (http://github.com/goshante)
+*  Year: 2023
+*  Original project: https://github.com/goshante/pocsag-hackrf-tx
+*
+*  Comment: Free to use if you credit me in your project.
+*/
 
 #include <stdint.h>
 
@@ -14,5 +23,3 @@ protected:
 
 	friend class HackRFDevice;
 };
-
-#endif // !_IHACKRFDATA_H

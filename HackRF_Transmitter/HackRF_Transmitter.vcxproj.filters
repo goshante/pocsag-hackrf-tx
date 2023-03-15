@@ -15,13 +15,13 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="FMModulator.h">
+    <ClInclude Include="HackRFTransmitter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="HackRFDevice.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="WavSource.h">
+    <ClInclude Include="HackRF_PCMSource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="IHackRFData.h">
@@ -32,13 +32,13 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="FMModulator.cpp">
+    <ClCompile Include="HackRFTransmitter.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="HackRFDevice.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="WavSource.cpp">
+    <ClCompile Include="HackRF_PCMSource.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="main.cpp">
