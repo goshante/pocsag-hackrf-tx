@@ -22,6 +22,7 @@
     <ProjectGuid>{BD76BC64-68F9-470F-A778-593BC958D301}</ProjectGuid>
     <RootNamespace>HackRF_Transmitter</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>POCSAG_HackRF</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
@@ -141,18 +142,18 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="FMModulator.h" />
+    <ClInclude Include="HackRFTransmitter.h" />
     <ClInclude Include="HackRFDevice.h" />
     <ClInclude Include="IHackRFData.h" />
     <ClInclude Include="POCSAG.h" />
-    <ClInclude Include="WavSource.h" />
+    <ClInclude Include="HackRF_PCMSource.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="FMModulator.cpp" />
+    <ClCompile Include="HackRFTransmitter.cpp" />
     <ClCompile Include="HackRFDevice.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="POCSAG.cpp" />
-    <ClCompile Include="WavSource.cpp" />
+    <ClCompile Include="HackRF_PCMSource.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

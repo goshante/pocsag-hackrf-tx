@@ -1,38 +1,36 @@
 #include <Windows.h>
 #include <iostream>
-#include "WavSource.h"
-#include "FMModulator.h"
+#include "HackRF_PCMSource.h"
+#include "HackRFTransmitter.h"
 #include "POCSAG.h"
 
-#define HACKRF_SAMPLE 2000000
-
-int main(int argc, char* argv[])
+int main()
 {
 	try
 	{
 		POCSAG::Encoder pocsag;
+		std::vector<uint8_t> message;
 		pocsag.SetAmplitude(8000);
-		std::vector<uint8_t> result;
-		pocsag.SetDateFormat(POCSAG::DateFormat::Begin);
-		pocsag.encode(result, 403361, POCSAG::Type::Alphanuberic, "pRIWET vOPA", POCSAG::BPS::BPS_512);
-		WavSource wav(result);
-		FMModulator mod(90);
+		pocsag.SetDateTimePosition(POCSAG::DateTimePosition::Begin);
+		pocsag.encode(message, 1234567, POCSAG::Type::Alphanuberic, "Hello World!", POCSAG::BPS::BPS_512);
 
-		mod.SetupFormat(wav.pcmInfo());
-		mod.PushSamples(wav.getData());
-		mod.SetSubChunkSizeSamples(4096);
-		mod.SetFrequency(161, 125);
-		mod.SetFMDeviationKHz(25.0);
-		mod.SetGainRF(40);
-		mod.SetAMP(true);
-		mod.StartTX();
+		HackRF_PCMSource pcm(message);
+		HackRFTransmitter tx;
+		tx.PushSamples(pcm);
+		tx.SetSubChunkSizeSamples(4096);
+		tx.SetFrequency(141,225);
+		tx.SetFMDeviationKHz(25.0);
+		tx.SetGainRF(40);
+		tx.SetAMP(true);
+		tx.StartTX();
 
-		while (((1 << 15) & GetAsyncKeyState(VK_ESCAPE)) == false && mod.IsIdle())
+		while (!tx.IsIdle())
 		{
-			Sleep(5);
+			if ((1 << 15) & GetAsyncKeyState(VK_ESCAPE))
+				break;
 		}
 
-		mod.StopTX();
+		tx.StopTX();
 	}
 	catch (const std::exception& ex)
 	{

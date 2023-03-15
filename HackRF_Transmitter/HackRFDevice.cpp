@@ -1,7 +1,16 @@
+/*
+*  Subject: HackRFDevice
+*  Purpose: Direct access to HackRF device. Not intended for external use.
+*  Author: Goshante (http://github.com/goshante)
+*  Year: 2023
+*  Original project: https://github.com/goshante/pocsag-hackrf-tx
+*
+*  Comment: Free to use if you credit me in your project.
+*/
+
 #include "HackRFDevice.h"
 
-
-int _hackrf_tx_callback(hackrf_transfer *transfer) 
+static int _hackrf_tx_callback(hackrf_transfer *transfer) 
 {
 	HackRFDevice *obj = (HackRFDevice *)transfer->tx_ctx;
 	return obj->HackRFCallback((int8_t *)transfer->buffer, transfer->valid_length);
@@ -107,7 +116,7 @@ void HackRFDevice::Close()
 	_dev = NULL;
 }
 
-bool HackRFDevice::IsRunning()
+bool HackRFDevice::IsRunning() const
 {
 	return mRunning;
 }

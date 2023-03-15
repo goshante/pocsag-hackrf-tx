@@ -1,3 +1,14 @@
+/*
+*  Subject: POCSAG::Encoder
+*  Purpose: Encode text, numeric and tone messages for pagers into POCSAG protocol buffer.
+*           Can be in raw form and in form of PCM modulated buffer.
+*  Author: Goshante (http://github.com/goshante)
+*  Year: 2023
+*  Original project: https://github.com/goshante/pocsag-hackrf-tx
+*
+*  Comment: Free to use if you credit me in your project.
+*/
+
 #include "POCSAG.h"
 #include <bitset>
 #include <stdexcept>
@@ -255,7 +266,7 @@ namespace POCSAG
 		: m_sampleRate(sampleRate)
 		, m_amplitude(PCM_AMPLITUDE)
 		, m_maxBatches(maxBatches)
-		, m_dateFormat(DateFormat::None)
+		, m_dateFormat(DateTimePosition::None)
 	{
 	}
 
@@ -282,9 +293,9 @@ namespace POCSAG
 		m_amplitude = sampleRate;
 	}
 
-	void Encoder::SetDateFormat(DateFormat format)
+	void Encoder::SetDateTimePosition(DateTimePosition position)
 	{
-		m_dateFormat = format;
+		m_dateFormat = position;
 	}
 
 	void Encoder::_modulatePOCSAG(std::vector<PCMSample_t>& output, const std::vector<uint8_t>& data, uint16_t bps)
@@ -366,9 +377,9 @@ namespace POCSAG
 	size_t Encoder::encode(std::vector<uint8_t>& output, RIC addr, Type msgType, std::string msg, BPS bps, Function func, bool rawPOCSAG)
 	{
 		//If we want to specify sending date and time in our message than append it according to position
-		if (m_dateFormat == DateFormat::Begin)
+		if (m_dateFormat == DateTimePosition::Begin)
 			msg = MakeDateAndTime() + msg;
-		else if (m_dateFormat == DateFormat::End)
+		else if (m_dateFormat == DateTimePosition::End)
 			msg += MakeDateAndTime();
 
 		size_t len = msg.length();
