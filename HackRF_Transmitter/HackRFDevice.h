@@ -27,6 +27,7 @@ public:
 	bool StartTx();
 	bool StopTx();
 	void Close();
+	bool IsRunning();
 };
 
 #endif // !

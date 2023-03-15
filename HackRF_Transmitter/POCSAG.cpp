@@ -7,8 +7,6 @@
 
 namespace POCSAG
 {
-	constexpr const uint8_t  MAX_BATCHES = 4; //Just let it be 4
-
 	constexpr const uint32_t NUMERIC_CHAR_SIZE_BITS = 4;
 	constexpr const uint32_t ALPHANUMERIC_CHAR_SIZE_BITS = 7;
 	constexpr const uint32_t ADDR_MAX = 2097151;
