@@ -15,6 +15,7 @@
 #include <chrono>
 #include <sstream>
 #include <iomanip>
+#include <functional>
 
 namespace POCSAG
 {
@@ -35,6 +36,158 @@ namespace POCSAG
 	using Codeword_t = uint32_t;
 	using NumericBuffer_t = std::vector<std::bitset<NUMERIC_CHAR_SIZE_BITS>>;
 	using AlphanumericBuffer_t = std::vector<std::bitset<ALPHANUMERIC_CHAR_SIZE_BITS>>;
+	using utf8char_t = unsigned long;
+
+	/*
+	* Pager message string encoder
+	*/
+
+	bool isUTF8(const std::string& str)
+	{
+		size_t i = 0;
+		while (i < str.length()) 
+		{
+			if ((str[i] & 0x80) == 0) 
+				i++;
+			else if ((str[i] & 0xE0) == 0xC0) 
+			{
+				if (i + 1 >= str.length() || (str[i + 1] & 0xC0) != 0x80) {
+					return false;
+				}
+				i += 2;
+			}
+			else if ((str[i] & 0xF0) == 0xE0) 
+			{
+				if (i + 2 >= str.length() ||
+					(str[i + 1] & 0xC0) != 0x80 || (str[i + 2] & 0xC0) != 0x80) {
+					return false;
+				}
+				i += 3;
+			}
+			else if ((str[i] & 0xF8) == 0xF0) 
+			{
+				if (i + 3 >= str.length() ||
+					(str[i + 1] & 0xC0) != 0x80 || (str[i + 2] & 0xC0) != 0x80 || (str[i + 3] & 0xC0) != 0x80) {
+					return false;
+				}
+				i += 4;
+			}
+			else
+				return false;
+		}
+		return true;
+	}
+
+	void enumerateUTF8String(const std::string& u8str, std::function<void(utf8char_t ch, size_t n, size_t cpsz)> callback)
+	{
+		size_t n = 0;
+		for (size_t i = 0; i < u8str.length();)
+		{
+			int cplen = 1;
+			if ((u8str[i] & 0xf8) == 0xf0) cplen = 4;
+			else if ((u8str[i] & 0xf0) == 0xe0) cplen = 3;
+			else if ((u8str[i] & 0xe0) == 0xc0) cplen = 2;
+			if ((i + cplen) > u8str.length()) cplen = 1;
+			utf8char_t ch = 0;
+			auto sch = u8str.substr(i, cplen);
+			for (size_t k = 0; k < cplen; k++)
+				reinterpret_cast<char*>(&ch)[(cplen - 1) - k] = sch[k];
+			callback(ch, n, cplen);
+			n++;
+			i += cplen;
+		}
+	}
+
+	std::string encodeString7bit(const std::string& input, Charset charset)
+	{
+		char cyrLower[33] =
+		{
+			'E', 'A', 'B', 'W', 'G', 'D', 'E', 'V',
+			'Z', 'I', 'J', 'K', 'L', 'M', 'N', 'O',
+			'P', 'R', 'S', 'T', 'U', 'F', 'H', 'C',
+			'^', '[', ']', '_', 'Y', 'X', '\\', '@', 'Q'
+		};
+
+		char cyrUpper[33] =
+		{
+			'e', 'a', 'b', 'w', 'g', 'd', 'e', 'v',
+			'z', 'i', 'j', 'k', 'l', 'm', 'n', 'o',
+			'p', 'r', 's', 't', 'u', 'f', 'h', 'c',
+			'~', '{', '}', '_', 'y', 'x', '|', '`', 'q'
+		};
+
+		auto convertSpecial = [&](char c) -> char
+		{
+			if (c == ']')
+				return 0x1E;
+			else if (c == '[')
+				return 0x1F;
+			else if (c == 'U' && charset == Charset::Cyrilic)
+				return 0x1B;
+			else
+				return c;
+		};
+
+		if (charset == Charset::Raw)
+			return input;
+
+		std::string str;
+
+		if (charset == Charset::Latin)
+		{
+			for (char c : input)
+			{
+				if (c < 26 || c > 126)
+					str.push_back('?');
+				else
+					str.push_back(convertSpecial(c));
+			}
+		}
+		else if (charset == Charset::Cyrilic)
+		{
+			if (isUTF8(input))
+			{
+				enumerateUTF8String(input, [&](utf8char_t ch, size_t n, size_t cpsz)
+				{
+					if (ch == 0xD191) //Small Yo
+						str.push_back(cyrLower[0]);
+					else if (ch == 0xD081) //Capital Yo
+						str.push_back(cyrUpper[0]);
+					else if (ch < 0x20 || (ch < 0xD090 && ch > 0xD18F))
+						str.push_back('?');
+					else if (ch >= 0xD090 && ch < 0xD0B0) //Capital cyrilic
+						str.push_back(cyrUpper[(ch + 1) - 0xD090]);
+					else if (ch >= 0xD0B0 && ch <= 0xD0BF) //Small cyrilic (part 1)
+						str.push_back(cyrLower[(ch + 1) - 0xD0B0]);
+					else if (ch >= 0xD180 && ch <= 0xD18F) //Small cyrilic (part 2)
+						str.push_back(cyrLower[(ch + 1) - 0xD180 + 0x10]);
+					else
+						str.push_back(convertSpecial(char(ch)));
+				});
+			}
+			else
+			{
+				for (unsigned char c : input)
+				{
+					if (c == 0xB8) //Small Yo
+						str.push_back(cyrLower[0]);
+					else if (c == 0xA8) //Capital Yo
+						str.push_back(cyrUpper[0]);
+					else if (c < 26 || c < 0xC0 && c > 0x7E)
+						str.push_back('?');
+					else if (c >= 0xC0 && c < 0xE0) //Capital cyrilic
+						str.push_back(cyrUpper[c - 0xC0 + 1]);
+					else if (c >= 0xE0) //Small cyrilic
+						str.push_back(cyrLower[c - 0xE0 + 1]);
+					else
+						str.push_back(convertSpecial(c));
+				}
+			}
+		}
+		str.push_back(0x0);
+
+		return str;
+	}
 
 	/*
 	*  Vector utils
@@ -200,7 +353,7 @@ namespace POCSAG
 
 	static bool ValidateMessage(const std::string& msg, Type msgType)
 	{
-		if (msgType != Type::Alphanuberic)
+		if (msgType != Type::Alphanumeric)
 			return true;
 
 		for (char c : msg)
@@ -374,8 +527,11 @@ namespace POCSAG
 		return oss.str();
 	}
 
-	size_t Encoder::encode(std::vector<uint8_t>& output, RIC addr, Type msgType, std::string msg, BPS bps, Function func, bool rawPOCSAG)
+	size_t Encoder::encode(std::vector<uint8_t>& output, RIC addr, Type msgType, std::string msg, BPS bps, Charset charset, Function func, bool rawPOCSAG)
 	{
+		//Pager 7-bit string encoding
+		msg = encodeString7bit(msg, charset);
+
 		//If we want to specify sending date and time in our message than append it according to position
 		if (m_dateFormat == DateTimePosition::Begin)
 			msg = MakeDateAndTime() + msg;
@@ -383,7 +539,7 @@ namespace POCSAG
 			msg += MakeDateAndTime();
 
 		size_t len = msg.length();
-		size_t charSize = (msgType == Type::Alphanuberic ? ALPHANUMERIC_CHAR_SIZE_BITS : NUMERIC_CHAR_SIZE_BITS); //Bits
+		size_t charSize = (msgType == Type::Alphanumeric ? ALPHANUMERIC_CHAR_SIZE_BITS : NUMERIC_CHAR_SIZE_BITS); //Bits
 		size_t msgSize = len * charSize;
 		size_t addrFrameNum = addr & 0b111; //Last 3 bits
 
@@ -406,6 +562,7 @@ namespace POCSAG
 		if (batchCount > m_maxBatches)
 			throw std::runtime_error("Message is too long, batch count exceeded.");
 
+		output.clear();
 		for (int i = 0; i < PREAMBLE_SIZE_BYTES; i++)
 			output.push_back(PREAMBLE_SEQUENCE);
 
@@ -450,7 +607,7 @@ namespace POCSAG
 					if (!addrFrame)
 						insert32bit(output, MakeMessageCodeword(messageBitsN, offset, maxBits));
 				}
-				else if (msgType == Type::Alphanuberic)
+				else if (msgType == Type::Alphanumeric)
 				{
 					insert32bit(output, MakeMessageCodeword(messageBitsA, offset, maxBits));
 					if (!addrFrame)

@@ -25,6 +25,7 @@ HackRFTransmitter::HackRFTransmitter(float localGain)
 	, m_stop(true)
 	, m_emptyQueue(true)
 	, m_pcmSampleRate(0)
+	, m_TX_On(false)
 {
 	memset(m_last_in_samples, 0, sizeof(m_last_in_samples));
 	
@@ -42,6 +43,7 @@ HackRFTransmitter::HackRFTransmitter(float localGain)
 	m_subchunkOffset = 0;
 	m_FMdeviationKHz = 75.0e3;
 	m_AM = false;
+	m_noIdleTx = false;
 
 	if (!m_device.Open(this))
 		throw std::runtime_error("Failed to open HackRF device.");
@@ -49,7 +51,7 @@ HackRFTransmitter::HackRFTransmitter(float localGain)
 
 HackRFTransmitter::~HackRFTransmitter()
 {
-	if (m_device.IsRunning())
+	if (m_TX_On)
 		StopTX();
 	m_deviceMutex.lock();
 	m_device.Close();
@@ -58,37 +60,54 @@ HackRFTransmitter::~HackRFTransmitter()
 
 void HackRFTransmitter::SetFMDeviationKHz(double value)
 {
-	if (m_device.IsRunning())
+	if (m_TX_On)
 		throw std::runtime_error("Attempting to change TX deviation while transmission is active");
 	m_FMdeviationKHz = value * 1000;
 }
 
+void HackRFTransmitter::SetTurnOffTXWhenIdle(bool off)
+{
+	m_noIdleTx = off;
+}
+
 void HackRFTransmitter::SetFrequency(uint64_t mhz, uint64_t khz, uint64_t hz)
 {
-	if (m_device.IsRunning())
+	if (m_TX_On)
 		throw std::runtime_error("Attempting to change TX frequency while transmission is active");
 	m_device.SetFrequency((mhz * 1000000) + (khz * 1000) + hz);
 }
 
 void HackRFTransmitter::SetGainRF(float gain)
 {
-	if (m_device.IsRunning())
+	if (m_TX_On)
 		throw std::runtime_error("Attempting to change TX gain while transmission is active");
 	m_device.SetGain(gain);
 }
 
 void HackRFTransmitter::SetLocalGain(float gain)
 {
-	if (m_device.IsRunning())
+	if (m_TX_On)
 		throw std::runtime_error("Attempting to change TX local gain while transmission is active");
 	m_localGain = gain;
 }
 
 void HackRFTransmitter::SetAMP(bool enableamp)
 {
-	if (m_device.IsRunning())
+	if (m_TX_On)
 		throw std::runtime_error("Attempting to change TX amp while transmission is active");
 	m_device.SetAMP(enableamp);
+}
+
+void HackRFTransmitter::Clear()
+{
+	if (m_TX_On)
+		throw std::runtime_error("Attempting to clear queue while transmission is active");
+
+	m_currentChunk.clear();
+	while (!m_waveQueue.empty())
+		m_waveQueue.pop();
+	m_subchunkOffset = 0;
+	m_FM_phase = 0;
 }
 
 bool HackRFTransmitter::StartTX()
@@ -107,6 +126,7 @@ bool HackRFTransmitter::StartTX()
 	m_started = {};
 	m_stop = false;
 	m_ready = true;
+	m_TX_On = true;
 
 	if (m_queueThread)
 		delete m_queueThread;
@@ -121,19 +141,22 @@ bool HackRFTransmitter::StartTX()
 
 void HackRFTransmitter::_workerThread()
 {
-	if (!m_device.StartTx())
+	if (!m_device.StartTx()) //Fail and return if we cannot start TX
 	{
+		m_TX_On = false;
 		m_started.set_value(false);
 		return;
 	}
+	else
+		m_started.set_value(true);	//Release waiter in StartTX() method
 
-	while (!m_stop)
+	while (!m_stop) //Continue untill we tell to stop
 	{
-		if (!m_currentChunk.empty())
+		if (!m_currentChunk.empty()) //If we still have unfinished subchunk - finish it first
 			goto continueSubchunk;
 
 		m_queueMutex.lock();
-		if (m_waveQueue.empty())
+		if (m_waveQueue.empty()) //When queue is empty and no chunks for TX
 		{
 			m_queueMutex.unlock();
 			m_emptyQueue = true;
@@ -141,15 +164,18 @@ void HackRFTransmitter::_workerThread()
 		else
 		{
 			m_queueMutex.unlock();
+			//If we finished last chunk - pop out next from queue
 			if (m_subchunkOffset >= m_currentChunk.size())
 			{
-				m_queueMutex.lock();
-				m_currentChunk = std::move(m_waveQueue.front());
+ 				m_queueMutex.lock();
+				m_currentChunk = std::move(m_waveQueue.front()); //Should be faster
 				m_waveQueue.pop();
 				m_queueMutex.unlock();
+
+				//Reset FM phase and subchunk offset before transmitting new subchunk of our new chunk
 				m_subchunkOffset = 0;
 				m_FM_phase = 0;
-				if (!_prepareNext())
+				if (!_prepareNext()) //Prepare first subchunk to be transmitted
 				{
 					m_currentChunk.clear();
 					continue;
@@ -159,27 +185,34 @@ void HackRFTransmitter::_workerThread()
 		continueSubchunk:
 			while (!m_stop)
 			{
-				if (m_ready)
+				if (m_ready) //When HackRF is idle
 				{
-					_nextSubChunk();
-					if (!_prepareNext())
-						break;
+					if (!m_device.IsRunning()) //Check TX status before transmit, start if TX is down.
+						m_device.StartTx();
+					_nextSubChunk(); //Transmit last prepared subchunk
+					if (!_prepareNext()) //Prepare next right after we started transmitting
+					{
+						//If we enabled No-TX when idle feature - stop TX on device.
+						if (m_noIdleTx && m_waveQueue.empty())
+							m_device.StopTx();
+ 						break;
+					}
 				}
 			}
 
-			if (!m_stop)
+			if (!m_stop) //If we stopped do not clear last subchunk, the rest could will be transmitteed later.
 				m_currentChunk.clear();
 		}
 	}
 
+	m_TX_On = false;
 	m_stopped.set_value(!m_device.StopTx());
 }
 
 bool HackRFTransmitter::StopTX()
 {
-	if (!m_device.IsRunning())
+	if (!m_TX_On && !m_queueThread)
 		return false;
-
 
 	m_stop = true;
 	auto fut = m_stopped.get_future();
@@ -196,7 +229,7 @@ bool HackRFTransmitter::StopTX()
 
 void HackRFTransmitter::SetAM(bool set)
 {
-	if (m_device.IsRunning())
+	if (m_TX_On)
 		throw std::runtime_error("Attempting to change TX modulation while transmission is active");
 
 	m_AM = set;
@@ -204,7 +237,7 @@ void HackRFTransmitter::SetAM(bool set)
 
 void HackRFTransmitter::SetSubChunkSizeSamples(size_t count)
 {
-	if (m_device.IsRunning())
+	if (m_TX_On)
 		throw std::runtime_error("Attempting to change subchunk sample count while transmission is active");
 
 	m_subchunkSizeSamples = (uint32_t)count;
@@ -217,7 +250,7 @@ uint32_t HackRFTransmitter::GetDeviceSampleRate() const
 
 void HackRFTransmitter::SetPCMSamplingRate(size_t sampleRate)
 {
-	if (m_device.IsRunning())
+	if (m_TX_On)
 		throw std::runtime_error("Trying to change PCM sample rate while TX is active.");
 
 	m_pcmSampleRate = (uint32_t)sampleRate;
@@ -227,7 +260,7 @@ void HackRFTransmitter::PushSamples(const HackRF_PCMSource& samples)
 {
 	std::lock_guard<std::mutex> lock(m_queueMutex);
 
-	if (!m_device.IsRunning())
+	if (!m_TX_On)
 		m_pcmSampleRate = samples.m_samplingRate;
 	
 	m_waveQueue.push(samples.m_buf);
@@ -385,12 +418,12 @@ void HackRFTransmitter::_nextSubChunk()
 
 bool HackRFTransmitter::IsIdle() const
 {
-	return m_currentChunk.empty() && m_emptyQueue && m_device.IsRunning();
+	return m_currentChunk.empty() && m_emptyQueue && m_TX_On;
 }
 
 bool HackRFTransmitter::IsRunning() const
 {
-	return m_device.IsRunning();
+	return m_TX_On;
 }
 
 bool HackRFTransmitter::WaitForEnd(const std::chrono::milliseconds timeout)
@@ -399,7 +432,7 @@ bool HackRFTransmitter::WaitForEnd(const std::chrono::milliseconds timeout)
 
 	while (waiting < timeout)
 	{
-		if (!m_device.IsRunning())
+		if (!m_TX_On)
 			return true;
 
 		std::this_thread::sleep_for(10ms);

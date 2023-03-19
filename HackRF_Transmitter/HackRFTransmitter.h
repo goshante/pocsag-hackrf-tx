@@ -47,6 +47,7 @@ private:
 	size_t m_subchunkOffset;
 	double m_FMdeviationKHz;
 	bool m_AM;
+	bool m_noIdleTx;
 	std::atomic<bool> m_ready;
 	double m_FM_phase;
 	std::thread* m_queueThread;
@@ -54,6 +55,7 @@ private:
 	std::promise<bool> m_started;
 	std::atomic<bool> m_stop;
 	std::atomic<bool> m_emptyQueue;
+	std::atomic<bool> m_TX_On;
 
 	void _interpolation();
 	void _modulation();
@@ -87,9 +89,11 @@ public:
 	void SetPCMSamplingRate(size_t sampleRate);
 	void SetAM(bool set);
 	void SetFMDeviationKHz(double value);
+	void SetTurnOffTXWhenIdle(bool off);
+	void Clear(); //Clear all samples for TX
 
 	//Stop and start TX
-	bool StartTX();
+	bool StartTX(); //If cleanUpPrevData - cleans all chunks and subchunks
 	bool StopTX();
 };
 
