@@ -87,7 +87,7 @@ namespace POCSAG
 			if ((i + cplen) > u8str.length()) cplen = 1;
 			utf8char_t ch = 0;
 			auto sch = u8str.substr(i, cplen);
-			for (size_t k = 0; k < cplen; k++)
+			for (int k = 0; k < cplen; k++)
 				reinterpret_cast<char*>(&ch)[(cplen - 1) - k] = sch[k];
 			callback(ch, n, cplen);
 			n++;

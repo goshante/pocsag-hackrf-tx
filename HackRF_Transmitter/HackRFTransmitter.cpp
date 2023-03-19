@@ -44,6 +44,7 @@ HackRFTransmitter::HackRFTransmitter(float localGain)
 	m_FMdeviationKHz = 75.0e3;
 	m_AM = false;
 	m_noIdleTx = false;
+	m_hackrf_sample = 0;
 
 	if (!m_device.Open(this))
 		throw std::runtime_error("Failed to open HackRF device.");
@@ -112,15 +113,19 @@ void HackRFTransmitter::Clear()
 
 bool HackRFTransmitter::StartTX()
 {
-	if (m_device.IsRunning() || (m_waveQueue.empty() && m_currentChunk.empty()))
+	if (m_TX_On)
 		return false;
 
 	if (m_currentChunk.empty())
 	{
 		m_subchunkOffset = 0;
-		m_hackrf_sample = uint32_t((m_pcmSampleRate * 1.0 / m_subchunkSizeSamples) * BUF_LEN);
-		m_device.SetSampleRate(m_hackrf_sample);
 		m_FM_phase = 0;
+
+		if (!m_waveQueue.empty() && m_pcmSampleRate != 0)
+		{
+			m_hackrf_sample = uint32_t((m_pcmSampleRate * 1.0 / m_subchunkSizeSamples) * BUF_LEN);
+			m_device.SetSampleRate(m_hackrf_sample);
+		}
 	}
 	m_stopped = {};
 	m_started = {};
@@ -223,6 +228,7 @@ bool HackRFTransmitter::StopTX()
 	m_queueThread->join();
 	delete m_queueThread;
 	m_queueThread = nullptr;
+	m_hackrf_sample = 0;
 
 	return stopped;
 }
@@ -260,7 +266,7 @@ void HackRFTransmitter::PushSamples(const HackRF_PCMSource& samples)
 {
 	std::lock_guard<std::mutex> lock(m_queueMutex);
 
-	if (!m_TX_On)
+	if (!m_TX_On || m_TX_On && m_pcmSampleRate == 0)
 		m_pcmSampleRate = samples.m_samplingRate;
 	
 	m_waveQueue.push(samples.m_buf);
@@ -391,7 +397,10 @@ bool HackRFTransmitter::_prepareNext()
 	else
 		m_sample_count = m_subchunkSizeSamples;
 
+	m_queueMutex.lock();
 	uint32_t newRFSampleRate = uint32_t((m_pcmSampleRate * 1.0 / m_subchunkSizeSamples) * BUF_LEN);
+	m_queueMutex.unlock();
+
 	if (m_hackrf_sample != newRFSampleRate)
 	{
 		m_hackrf_sample = newRFSampleRate;
