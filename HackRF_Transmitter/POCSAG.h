@@ -21,7 +21,7 @@ namespace POCSAG
 	enum class Type
 	{
 		Numeric,
-		Alphanuberic,
+		Alphanumeric,
 		Tone
 	};
 
@@ -45,6 +45,13 @@ namespace POCSAG
 		BPS_512 = 512,
 		BPS_1200 = 1200,
 		BPS_2400 = 2400
+	};
+
+	enum class Charset
+	{
+		Raw,
+		Latin,
+		Cyrilic
 	};
 
 	class Encoder
@@ -88,10 +95,11 @@ namespace POCSAG
 		//  bps       [in]           - Bits per second for POCSAG transmission. Can be 512, 1200 or 2400. Makes no difference if rawPOCSAG is true.
 		//                             Can be empty.
 		//  msgType   [in]           - Type of message. Alphanumeric for text, Numeric for numbers, Tone for empty messages.
+		//  charset   [in, optional] - Specify charset of msg message (if alphanumeric). Raw means no encoding conversion, raw string will be sent.
 		//  func      [in, optional] - Type of notification. Depends on reciever-side implementation. Function::A by default, always works fine.
 		//  rawPOCSAG [in, optional] - If false returns modulated PCM (wave) that is ready to use with your RF TX. If true returns raw POCSAG buffer.
 		//							   This buffer is just raw buffer of encoded message. This argument is false by default.
 		// Returns: If rawPOCSAG true returns size in bits of encoded pocsag message. If rawPOCSAG false return total count of PCM samples.
-		size_t encode(std::vector<uint8_t>& output, RIC address, Type msgType, std::string msg, BPS bps, Function func = Function::A, bool rawPOCSAG = false);
+		size_t encode(std::vector<uint8_t>& output, RIC address, Type msgType, std::string msg, BPS bps, Charset charset = Charset::Latin, Function func = Function::A, bool rawPOCSAG = false);
 	};
 }
