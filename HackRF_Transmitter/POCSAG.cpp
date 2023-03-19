@@ -117,11 +117,14 @@ namespace POCSAG
 
 		auto convertSpecial = [&](char c) -> char
 		{
+			if (charset == Charset::Latin)
+				return c;
+
 			if (c == ']')
 				return 0x1E;
 			else if (c == '[')
 				return 0x1F;
-			else if (c == 'U' && charset == Charset::Cyrilic)
+			else if (c == 'U')
 				return 0x1B;
 			else
 				return c;
@@ -158,14 +161,14 @@ namespace POCSAG
 							str.push_back(cyrLower[0]);
 						else if (ch == 0xD081) //Capital Yo
 							str.push_back(cyrUpper[0]);
-						else if ((ch < 0x20 || (ch < 0xD090 && ch > 0xD18F)) && ch != '\n')
-							str.push_back('?');
 						else if (ch >= 0xD090 && ch < 0xD0B0) //Capital cyrilic
 							str.push_back(cyrUpper[(ch + 1) - 0xD090]);
 						else if (ch >= 0xD0B0 && ch <= 0xD0BF) //Small cyrilic (part 1)
 							str.push_back(cyrLower[(ch + 1) - 0xD0B0]);
 						else if (ch >= 0xD180 && ch <= 0xD18F) //Small cyrilic (part 2)
 							str.push_back(cyrLower[(ch + 1) - 0xD180 + 0x10]);
+						else if ((ch < 0x20 || ch > 0x7E) && ch != '\n')
+							str.push_back('?');
 						else
 							str.push_back(convertSpecial(char(ch)));
 					});
@@ -600,6 +603,8 @@ namespace POCSAG
 		output.clear();
 		for (int i = 0; i < PREAMBLE_SIZE_BYTES; i++)
 			output.push_back(PREAMBLE_SEQUENCE);
+
+
 
 		bool addrIsSet = false;
 		size_t offset = 0;
