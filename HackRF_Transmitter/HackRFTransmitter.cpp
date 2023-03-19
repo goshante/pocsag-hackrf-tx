@@ -155,6 +155,10 @@ void HackRFTransmitter::_workerThread()
 	else
 		m_started.set_value(true);	//Release waiter in StartTX() method
 
+	//Stop if no data for TX (when m_noIdleTx). We start at least to test that we are able to start
+	if (m_noIdleTx && m_currentChunk.empty() && m_waveQueue.empty())
+		m_device.StopTx();
+
 	while (!m_stop) //Continue untill we tell to stop
 	{
 		if (!m_currentChunk.empty()) //If we still have unfinished subchunk - finish it first
