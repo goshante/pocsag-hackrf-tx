@@ -25,9 +25,11 @@ namespace POCSAG
 	constexpr const uint32_t CW_MESSAGE_BIT = 0x80000000;
 	constexpr const uint32_t SYNC_CODEWORD = 0x7CD215D8;
 	constexpr const uint32_t IDLE_CODEWORD = 0x7A89C197;
-	constexpr const uint32_t BATCH_SIZE_IN_CW = 17;
 	constexpr const uint32_t CW_MSG_SIZE_BITS = 20;
 	constexpr const uint32_t FRAMES_PER_BATCH = 8;
+	constexpr const uint32_t CW_PER_FRAMES = 2;
+	constexpr const uint32_t BATCH_SIZE_IN_CW = (FRAMES_PER_BATCH * CW_PER_FRAMES) + 1;
+	constexpr const uint32_t BATCH_MESSAGE_MAX_BITS = FRAMES_PER_BATCH * CW_PER_FRAMES * CW_MSG_SIZE_BITS;
 	constexpr const uint32_t PREAMBLE_SIZE_BYTES = 72;
 	constexpr const uint8_t  PREAMBLE_SEQUENCE = 0xAA; //10101010
 	constexpr const uint16_t PCM_AMPLITUDE = 5000;
@@ -45,27 +47,27 @@ namespace POCSAG
 	bool isUTF8(const std::string& str)
 	{
 		size_t i = 0;
-		while (i < str.length()) 
+		while (i < str.length())
 		{
-			if ((str[i] & 0x80) == 0) 
+			if ((str[i] & 0x80) == 0)
 				i++;
-			else if ((str[i] & 0xE0) == 0xC0) 
+			else if ((str[i] & 0xE0) == 0xC0)
 			{
-				if (i + 1 >= str.length() || (str[i + 1] & 0xC0) != 0x80) 
+				if (i + 1 >= str.length() || (str[i + 1] & 0xC0) != 0x80)
 					return false;
 				i += 2;
 			}
-			else if ((str[i] & 0xF0) == 0xE0) 
+			else if ((str[i] & 0xF0) == 0xE0)
 			{
 				if (i + 2 >= str.length() ||
-					(str[i + 1] & 0xC0) != 0x80 || (str[i + 2] & 0xC0) != 0x80) 
+					(str[i + 1] & 0xC0) != 0x80 || (str[i + 2] & 0xC0) != 0x80)
 					return false;
 				i += 3;
 			}
-			else if ((str[i] & 0xF8) == 0xF0) 
+			else if ((str[i] & 0xF8) == 0xF0)
 			{
 				if (i + 3 >= str.length() ||
-					(str[i + 1] & 0xC0) != 0x80 || (str[i + 2] & 0xC0) != 0x80 || (str[i + 3] & 0xC0) != 0x80) 
+					(str[i + 1] & 0xC0) != 0x80 || (str[i + 2] & 0xC0) != 0x80 || (str[i + 3] & 0xC0) != 0x80)
 					return false;
 				i += 4;
 			}
@@ -134,7 +136,10 @@ namespace POCSAG
 		{
 			for (char c : input)
 			{
-				if (c < 26 || c > 126)
+				if (c == '\r')
+					continue;
+
+				if ((c < 26 || c > 126) && c != '\n')
 					str.push_back('?');
 				else
 					str.push_back(convertSpecial(c));
@@ -145,32 +150,38 @@ namespace POCSAG
 			if (isUTF8(input))
 			{
 				enumerateUTF8String(input, [&](utf8char_t ch, size_t n, size_t cpsz)
-				{
-					if (ch == 0xD191) //Small Yo
-						str.push_back(cyrLower[0]);
-					else if (ch == 0xD081) //Capital Yo
-						str.push_back(cyrUpper[0]);
-					else if (ch < 0x20 || (ch < 0xD090 && ch > 0xD18F))
-						str.push_back('?');
-					else if (ch >= 0xD090 && ch < 0xD0B0) //Capital cyrilic
-						str.push_back(cyrUpper[(ch + 1) - 0xD090]);
-					else if (ch >= 0xD0B0 && ch <= 0xD0BF) //Small cyrilic (part 1)
-						str.push_back(cyrLower[(ch + 1) - 0xD0B0]);
-					else if (ch >= 0xD180 && ch <= 0xD18F) //Small cyrilic (part 2)
-						str.push_back(cyrLower[(ch + 1) - 0xD180 + 0x10]);
-					else
-						str.push_back(convertSpecial(char(ch)));
-				});
+					{
+						if (ch == '\r')
+							return;
+
+						if (ch == 0xD191) //Small Yo
+							str.push_back(cyrLower[0]);
+						else if (ch == 0xD081) //Capital Yo
+							str.push_back(cyrUpper[0]);
+						else if ((ch < 0x20 || (ch < 0xD090 && ch > 0xD18F)) && ch != '\n')
+							str.push_back('?');
+						else if (ch >= 0xD090 && ch < 0xD0B0) //Capital cyrilic
+							str.push_back(cyrUpper[(ch + 1) - 0xD090]);
+						else if (ch >= 0xD0B0 && ch <= 0xD0BF) //Small cyrilic (part 1)
+							str.push_back(cyrLower[(ch + 1) - 0xD0B0]);
+						else if (ch >= 0xD180 && ch <= 0xD18F) //Small cyrilic (part 2)
+							str.push_back(cyrLower[(ch + 1) - 0xD180 + 0x10]);
+						else
+							str.push_back(convertSpecial(char(ch)));
+					});
 			}
 			else
 			{
 				for (unsigned char c : input)
 				{
+					if (c == '\r')
+						continue;
+
 					if (c == 0xB8) //Small Yo
 						str.push_back(cyrLower[0]);
 					else if (c == 0xA8) //Capital Yo
 						str.push_back(cyrUpper[0]);
-					else if (c < 26 || c < 0xC0 && c > 0x7E)
+					else if ((c < 26 || c < 0xC0 && c > 0x7E) && c != '\n')
 						str.push_back('?');
 					else if (c >= 0xC0 && c < 0xE0) //Capital cyrilic
 						str.push_back(cyrUpper[c - 0xC0 + 1]);
@@ -309,10 +320,10 @@ namespace POCSAG
 		size_t bitIndex = offset - (cellNum * wordSize);
 
 		size_t counter = 0;
-		for (size_t i = cellNum; i < msg.size() && counter < count; i++)
+		for (size_t i = cellNum; i < msg.size() && counter < count && counter + offset < maxBits; i++)
 		{
 			auto cell = msg[i];
-			for (size_t j = bitIndex; j < wordSize && counter < count; j++)
+			for (size_t j = bitIndex; j < wordSize && counter < count && counter + offset < maxBits; j++)
 			{
 				cw <<= 1;
 				cw |= cell[wordSize - 1 - j] ? 1 : 0;
@@ -403,8 +414,14 @@ namespace POCSAG
 			encoded.push_back(std::bitset<ALPHANUMERIC_CHAR_SIZE_BITS>(n));
 			maxBits += ALPHANUMERIC_CHAR_SIZE_BITS;
 		}
-		encoded.push_back(std::bitset<ALPHANUMERIC_CHAR_SIZE_BITS>(0)); //Zero character as the end of the message
-		maxBits += ALPHANUMERIC_CHAR_SIZE_BITS;
+
+		//Zero character as the end of the message
+		if (encoded.size() > 0 && encoded[encoded.size() - 1].to_ulong() != 0)
+		{
+			encoded.push_back(std::bitset<ALPHANUMERIC_CHAR_SIZE_BITS>(0));
+			maxBits += ALPHANUMERIC_CHAR_SIZE_BITS;
+		}
+
 		return encoded;
 	}
 
@@ -552,17 +569,6 @@ namespace POCSAG
 		if (msgType == Type::Tone)
 			msgCWCount = 0;
 
-		//Forecasting count of batches
-		size_t batchCount = (msgCWCount + (addrFrameNum * 2)) / (BATCH_SIZE_IN_CW - 1);
-		if ((msgCWCount + (addrFrameNum * 2)) % (BATCH_SIZE_IN_CW - 1) != 0)
-			batchCount++;
-		if (batchCount > m_maxBatches)
-			throw std::runtime_error("Message is too long, batch count exceeded.");
-
-		output.clear();
-		for (int i = 0; i < PREAMBLE_SIZE_BYTES; i++)
-			output.push_back(PREAMBLE_SEQUENCE);
-
 		//We have different containers for numeric of alphanumeric messages
 		NumericBuffer_t messageBitsN;
 		AlphanumericBuffer_t messageBitsA;
@@ -572,6 +578,28 @@ namespace POCSAG
 			messageBitsN = EncodeMessageNumeric(msg, charSize, maxBits);
 		else
 			messageBitsA = EncodeMessageAlphanumeric(msg, charSize, maxBits);
+
+		//How much bits we skip before message
+		size_t addrBitSkip = (addrFrameNum * CW_MSG_SIZE_BITS * CW_PER_FRAMES) + CW_MSG_SIZE_BITS;
+
+		size_t batchCount = ((addrBitSkip + maxBits) / BATCH_MESSAGE_MAX_BITS);
+		if ((addrBitSkip + maxBits) % BATCH_MESSAGE_MAX_BITS != 0)
+			batchCount++;
+
+		size_t lastFrameNum = (addrBitSkip + maxBits) / BATCH_MESSAGE_MAX_BITS;
+		lastFrameNum = (addrBitSkip + maxBits) - (BATCH_MESSAGE_MAX_BITS * lastFrameNum);
+		lastFrameNum = lastFrameNum / (CW_PER_FRAMES * CW_MSG_SIZE_BITS);
+
+		//Otherwise trash characters could be displayed on pager at the end of the message
+		if (lastFrameNum == (FRAMES_PER_BATCH - 1))
+			batchCount++;
+
+		if (batchCount > m_maxBatches)
+			throw std::runtime_error("Message is too long, batch count exceeded.");
+
+		output.clear();
+		for (int i = 0; i < PREAMBLE_SIZE_BYTES; i++)
+			output.push_back(PREAMBLE_SEQUENCE);
 
 		bool addrIsSet = false;
 		size_t offset = 0;
@@ -587,33 +615,40 @@ namespace POCSAG
 				bool addrFrame = false;
 				if (!addrIsSet && j != addrFrameNum) //Skip frames untill address
 				{
-					insert32bit(output, IDLE_CODEWORD); //Idle codeword means empty codeword part of frame
-					insert32bit(output, IDLE_CODEWORD);
+					for (size_t k = 0; k < CW_PER_FRAMES; k++)
+						insert32bit(output, IDLE_CODEWORD); //Idle codeword means empty codeword part of frame
 					continue;
 				}
 				else if (!addrIsSet) //Set address and begin set message codewords
 				{
 					insert32bit(output, MakeAddressCodeword(addr, func));
+
+					if (msgType == Type::Numeric)
+						insert32bit(output, MakeMessageCodeword(messageBitsN, offset, maxBits));
+					else if (msgType == Type::Alphanumeric)
+						insert32bit(output, MakeMessageCodeword(messageBitsA, offset, maxBits));
+					else
+						insert32bit(output, IDLE_CODEWORD);
+
 					addrIsSet = true;
 					addrFrame = true;
+
+					continue;
 				}
 
-				if (msgType == Type::Numeric)
+				else if (msgType == Type::Numeric)
 				{
-					insert32bit(output, MakeMessageCodeword(messageBitsN, offset, maxBits));
-					if (!addrFrame)
+					for (size_t k = 0; k < CW_PER_FRAMES; k++)
 						insert32bit(output, MakeMessageCodeword(messageBitsN, offset, maxBits));
 				}
 				else if (msgType == Type::Alphanumeric)
 				{
-					insert32bit(output, MakeMessageCodeword(messageBitsA, offset, maxBits));
-					if (!addrFrame)
+					for (size_t k = 0; k < CW_PER_FRAMES; k++)
 						insert32bit(output, MakeMessageCodeword(messageBitsA, offset, maxBits));
 				}
 				else //Tone messages have no content
 				{
-					insert32bit(output, IDLE_CODEWORD);
-					if (!addrFrame)
+					for (size_t k = 0; k < CW_PER_FRAMES; k++)
 						insert32bit(output, IDLE_CODEWORD);
 				}
 			}
