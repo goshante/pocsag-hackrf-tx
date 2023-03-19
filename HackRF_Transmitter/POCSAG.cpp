@@ -51,25 +51,22 @@ namespace POCSAG
 				i++;
 			else if ((str[i] & 0xE0) == 0xC0) 
 			{
-				if (i + 1 >= str.length() || (str[i + 1] & 0xC0) != 0x80) {
+				if (i + 1 >= str.length() || (str[i + 1] & 0xC0) != 0x80) 
 					return false;
-				}
 				i += 2;
 			}
 			else if ((str[i] & 0xF0) == 0xE0) 
 			{
 				if (i + 2 >= str.length() ||
-					(str[i + 1] & 0xC0) != 0x80 || (str[i + 2] & 0xC0) != 0x80) {
+					(str[i + 1] & 0xC0) != 0x80 || (str[i + 2] & 0xC0) != 0x80) 
 					return false;
-				}
 				i += 3;
 			}
 			else if ((str[i] & 0xF8) == 0xF0) 
 			{
 				if (i + 3 >= str.length() ||
-					(str[i + 1] & 0xC0) != 0x80 || (str[i + 2] & 0xC0) != 0x80 || (str[i + 3] & 0xC0) != 0x80) {
+					(str[i + 1] & 0xC0) != 0x80 || (str[i + 2] & 0xC0) != 0x80 || (str[i + 3] & 0xC0) != 0x80) 
 					return false;
-				}
 				i += 4;
 			}
 			else
