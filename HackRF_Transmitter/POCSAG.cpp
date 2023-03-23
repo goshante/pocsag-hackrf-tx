@@ -382,15 +382,15 @@ namespace POCSAG
 			return ReverseNum(c - 0x30);
 		else if (c == '*')
 			return ReverseNum(0xA);
-		else if (c == 'U')
+		else if (c == 'U' || c == 'u')
 			return ReverseNum(0xB);
 		else if (c == ' ')
 			return ReverseNum(0xC);
 		else if (c == '-')
 			return ReverseNum(0xD);
-		else if (c == ')')
+		else if (c == ')' || c == ']')
 			return ReverseNum(0xE);
-		else if (c == '(')
+		else if (c == '(' || c == '[')
 			return ReverseNum(0xF);
 		else
 			throw std::runtime_error("Unknown numeric value.");
@@ -401,6 +401,8 @@ namespace POCSAG
 		NumericBuffer_t encoded;
 		for (char c : msg)
 		{
+			if (c == 0)
+				break;
 			uint8_t n = ConvertToNumeric(c); //Returns already reversed bit order, but char order is normal
 			encoded.push_back(std::bitset<NUMERIC_CHAR_SIZE_BITS>(n));
 			maxBits += NUMERIC_CHAR_SIZE_BITS;
@@ -546,14 +548,17 @@ namespace POCSAG
 
 	size_t Encoder::encode(std::vector<uint8_t>& output, RIC addr, Type msgType, std::string msg, BPS bps, Charset charset, Function func, bool rawPOCSAG)
 	{
-		//Pager 7-bit string encoding
-		msg = encodeString7bit(msg, charset);
-
 		//If we want to specify sending date and time in our message than append it according to position
-		if (m_dateFormat == DateTimePosition::Begin)
-			msg = MakeDateAndTime() + msg;
-		else if (m_dateFormat == DateTimePosition::End)
-			msg += MakeDateAndTime();
+		if (msgType == Type::Alphanumeric)
+		{
+			//Pager 7-bit string encoding
+			msg = encodeString7bit(msg, charset);
+
+			if (m_dateFormat == DateTimePosition::Begin)
+				msg = MakeDateAndTime() + msg;
+			else if (m_dateFormat == DateTimePosition::End)
+				msg += MakeDateAndTime();
+		}
 
 		size_t len = msg.length();
 		size_t charSize = (msgType == Type::Alphanumeric ? ALPHANUMERIC_CHAR_SIZE_BITS : NUMERIC_CHAR_SIZE_BITS); //Bits
