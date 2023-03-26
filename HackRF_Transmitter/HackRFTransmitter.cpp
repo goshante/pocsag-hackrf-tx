@@ -446,7 +446,7 @@ bool HackRFTransmitter::IsRunning() const
 	return m_TX_On;
 }
 
-bool HackRFTransmitter::WaitForEnd(const std::chrono::milliseconds timeout)
+bool HackRFTransmitter::WaitForEnd(const std::chrono::milliseconds timeout) const
 {
 	std::chrono::milliseconds waiting = 0ms;
 
@@ -462,7 +462,7 @@ bool HackRFTransmitter::WaitForEnd(const std::chrono::milliseconds timeout)
 	return false;
 }
 
-bool HackRFTransmitter::WaitForIdle(const std::chrono::milliseconds timeout)
+bool HackRFTransmitter::WaitForIdle(const std::chrono::milliseconds timeout) const
 {
 	std::chrono::milliseconds waiting = 0ms;
 
