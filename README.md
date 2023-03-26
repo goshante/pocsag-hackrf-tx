@@ -1,7 +1,9 @@
 # POCSAG C++ Implementation & Implementation of HackRF transmitter
 Full implementation of POCSAG protocol on C++ that produces encoded pager message modulated in PCM (Wave) or in raw data. And also feature to transmit it via HackRF. Very easy to use and to build. 
 <br />You can stream your PCM data or WAV files via radio. Or make your own paging station and software.
-
+<br />
+<br />If you are looking for some GUI tool that can send messages to pagers from Windows, you can check my GUI Pager sender based on this project here:
+<br />https://github.com/goshante/hackrf-pocsag-gui
 ## About POCSAG
 POCSAG is the most commonly used protocol for pagers. In this repository you can find **POCSAG.cpp** and **POCSAG.h** sources. This is full implementation of POCSAG encoder. You don't need any 3rd party additional libraries to use it. This libary is ready to use juse after copying it into your project.
 <br />
@@ -16,7 +18,7 @@ POCSAG is the most commonly used protocol for pagers. In this repository you can
 <br />You are free to use this library in your projects, but only if you credit me and this repository in your project + your repository.
 
 ## About HackRF transmitter
-<br />This is fully working HackRF FM transmitter. The example how to use it you can see in **main.cpp** file. Very easy to use. You can send any PCM samples, sounds, music and even data in FM moduiation via your HackRF. FSK is supported, but only as a PCM samples. Works as a queue of chunks in internal thread, you can push new chunks while transmitting, so it's possible to make live streaming software for HackRF with this. To use this library you need **libhackrf**, **libusb** and **pthread**. It's very easy to build on Windows too! I'l help you with this below.
+This is fully working HackRF FM transmitter. The example how to use it you can see in **main.cpp** file. Very easy to use. You can send any PCM samples, sounds, music and even data in FM moduiation via your HackRF. FSK is supported, but only as a PCM samples. Works as a queue of chunks in internal thread, you can push new chunks while transmitting, so it's possible to make live streaming software for HackRF with this. To use this library you need **libhackrf**, **libusb** and **pthread**. It's very easy to build on Windows too! I'l help you with this below.
 <br />
 <br />Based on this project, but now my project has almost nothing common with it's origin. Deep refactoring was done and almost all code is rewritten. Removed most of all C-style code snippets, unused garbage, etc.
 <br />Project link:
