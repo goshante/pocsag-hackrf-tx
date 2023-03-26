@@ -78,6 +78,13 @@ void HackRFTransmitter::SetFrequency(uint64_t mhz, uint64_t khz, uint64_t hz)
 	m_device.SetFrequency((mhz * 1000000) + (khz * 1000) + hz);
 }
 
+void HackRFTransmitter::SetFrequency(uint64_t hz)
+{
+	if (m_TX_On)
+		throw std::runtime_error("Attempting to change TX frequency while transmission is active");
+	m_device.SetFrequency(hz);
+}
+
 void HackRFTransmitter::SetGainRF(float gain)
 {
 	if (m_TX_On)
@@ -446,6 +453,22 @@ bool HackRFTransmitter::WaitForEnd(const std::chrono::milliseconds timeout)
 	while (waiting < timeout)
 	{
 		if (!m_TX_On)
+			return true;
+
+		std::this_thread::sleep_for(10ms);
+		waiting += 10ms;
+	}
+
+	return false;
+}
+
+bool HackRFTransmitter::WaitForIdle(const std::chrono::milliseconds timeout)
+{
+	std::chrono::milliseconds waiting = 0ms;
+
+	while (waiting < timeout)
+	{
+		if (IsIdle())
 			return true;
 
 		std::this_thread::sleep_for(10ms);

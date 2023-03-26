@@ -548,16 +548,16 @@ namespace POCSAG
 
 	size_t Encoder::encode(std::vector<uint8_t>& output, RIC addr, Type msgType, std::string msg, BPS bps, Charset charset, Function func, bool rawPOCSAG)
 	{
-		//If we want to specify sending date and time in our message than append it according to position
 		if (msgType == Type::Alphanumeric)
 		{
 			//Pager 7-bit string encoding
 			msg = encodeString7bit(msg, charset);
 
+			//If we want to specify sending date and time in our message than append it according to position
 			if (m_dateFormat == DateTimePosition::Begin)
 				msg = MakeDateAndTime() + msg;
 			else if (m_dateFormat == DateTimePosition::End)
-				msg += MakeDateAndTime();
+				msg += "\n" + MakeDateAndTime();
 		}
 
 		size_t len = msg.length();
