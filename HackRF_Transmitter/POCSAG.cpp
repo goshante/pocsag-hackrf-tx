@@ -384,7 +384,7 @@ namespace POCSAG
 			return ReverseNum(0xA);
 		else if (c == 'U' || c == 'u')
 			return ReverseNum(0xB);
-		else if (c == ' ')
+		else if (c == ' ' || c == '\n')
 			return ReverseNum(0xC);
 		else if (c == '-')
 			return ReverseNum(0xD);
@@ -401,7 +401,7 @@ namespace POCSAG
 		NumericBuffer_t encoded;
 		for (char c : msg)
 		{
-			if (c == 0)
+			if (c == 0 || c == '\r')
 				break;
 			uint8_t n = ConvertToNumeric(c); //Returns already reversed bit order, but char order is normal
 			encoded.push_back(std::bitset<NUMERIC_CHAR_SIZE_BITS>(n));
