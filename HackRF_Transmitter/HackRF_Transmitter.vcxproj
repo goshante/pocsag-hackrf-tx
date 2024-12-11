@@ -78,12 +78,12 @@
     <LibraryPath>D:\libhackrf\win32\Release;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <IncludePath>D:\libhackrf\include;$(IncludePath)</IncludePath>
-    <LibraryPath>D:\libhackrf\x64\Debug;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\repo\pocsag-hackrf-tx\libhackrf\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\repo\pocsag-hackrf-tx\libhackrf\x64\Debug;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <IncludePath>D:\libhackrf\include;$(IncludePath)</IncludePath>
-    <LibraryPath>D:\libhackrf\x64\Release;$(LibraryPath)</LibraryPath>
+    <IncludePath>C:\repo\pocsag-hackrf-tx\libhackrf\include;$(IncludePath)</IncludePath>
+    <LibraryPath>C:\repo\pocsag-hackrf-tx\libhackrf\x64\Release;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>

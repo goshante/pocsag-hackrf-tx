@@ -26,8 +26,6 @@ private:
 	HackRF_PCMSource(const HackRF_PCMSource&) = delete;
 	HackRF_PCMSource& operator=(const HackRF_PCMSource&) = delete;
 
-	friend class HackRFTransmitter;
-
 public:
 	//Build buffer from file
 	HackRF_PCMSource(const std::string& fileName);
@@ -38,4 +36,7 @@ public:
 	//Build buffer from raw PCM samples and some data about it
 	HackRF_PCMSource(const void* sampleBufferRaw, size_t bufSize, uint32_t sampleRate, uint32_t bitrate, uint16_t channels);
 	~HackRF_PCMSource();
+
+	uint32_t GetSamplingRate() const;
+	const std::vector<float>& GetRawBuf() const;
 };
